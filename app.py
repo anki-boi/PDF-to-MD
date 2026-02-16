@@ -5,7 +5,7 @@ from datetime import datetime
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from processor import build_markdown_zip
+from processor import build_anki_apkg, build_markdown_zip
 
 app = Flask(__name__)
 
@@ -29,27 +29,47 @@ def process_pdf():
     force_ocr = request.form.get("force_ocr") == "true"
     ocr_lang = request.form.get("ocr_lang") or "eng"
     min_chars_per_page = int(request.form.get("min_chars_per_page") or 25)
+    output_format = request.form.get("format") or "zip"
+    deck_name = request.form.get("deck_name") or "PDF Imports"
+    use_subdecks = request.form.get("use_subdecks", "true") == "true"
 
     try:
-        zip_bytes = build_markdown_zip(
-            source_name=uploaded.filename,
-            pdf_bytes=uploaded.read(),
-            ai_cleanup=ai_cleanup,
-            api_key=api_key,
-            model=model,
-            endpoint=endpoint,
-            force_ocr=force_ocr,
-            ocr_lang=ocr_lang,
-            min_chars_per_page=min_chars_per_page,
-        )
+        if output_format == "apkg":
+            output_bytes = build_anki_apkg(
+                source_name=uploaded.filename,
+                pdf_bytes=uploaded.read(),
+                ai_cleanup=ai_cleanup,
+                api_key=api_key,
+                model=model,
+                endpoint=endpoint,
+                force_ocr=force_ocr,
+                ocr_lang=ocr_lang,
+                min_chars_per_page=min_chars_per_page,
+                deck_name=deck_name,
+                use_subdecks=use_subdecks,
+            )
+        else:
+            output_bytes = build_markdown_zip(
+                source_name=uploaded.filename,
+                pdf_bytes=uploaded.read(),
+                ai_cleanup=ai_cleanup,
+                api_key=api_key,
+                model=model,
+                endpoint=endpoint,
+                force_ocr=force_ocr,
+                ocr_lang=ocr_lang,
+                min_chars_per_page=min_chars_per_page,
+            )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_name = f"{uploaded.filename.rsplit('.', 1)[0]}-chapters-{ts}.zip"
+    ext = "apkg" if output_format == "apkg" else "zip"
+    mimetype = "application/octet-stream" if output_format == "apkg" else "application/zip"
+    out_name = f"{uploaded.filename.rsplit('.', 1)[0]}-chapters-{ts}.{ext}"
     return send_file(
-        io.BytesIO(zip_bytes),
-        mimetype="application/zip",
+        io.BytesIO(output_bytes),
+        mimetype=mimetype,
         as_attachment=True,
         download_name=out_name,
     )

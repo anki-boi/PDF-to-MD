@@ -1,4 +1,4 @@
-from processor import should_use_ocr, split_into_chapters
+from processor import _anki_deck_name, should_use_ocr, split_into_chapters
 
 
 def test_split_into_chapters_detects_chapter_heading():
@@ -27,3 +27,11 @@ def test_should_use_ocr_when_embedded_text_is_too_sparse():
 def test_should_not_use_ocr_when_embedded_text_is_sufficient():
     pages = ["this is enough text", "this is enough text too"]
     assert should_use_ocr(pages, min_chars_per_page=5) is False
+
+
+def test_anki_deck_name_uses_subdecks_when_enabled():
+    assert _anki_deck_name("Pharma", "Chapter 1: Intro", use_subdecks=True) == "Pharma::Chapter 1: Intro"
+
+
+def test_anki_deck_name_without_subdecks_uses_root_only():
+    assert _anki_deck_name("Pharma", "Chapter 1: Intro", use_subdecks=False) == "Pharma"

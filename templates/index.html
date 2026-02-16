@@ -38,7 +38,20 @@
         <label>Endpoint <input id="endpoint" type="text" value="https://api.openai.com/v1/chat/completions" /></label>
       </div>
 
-      <button id="run">Generate ZIP</button>
+      <div class="section grid">
+        <label>Output format
+          <select id="format">
+            <option value="zip" selected>ZIP (flattened PDF + markdown chapters)</option>
+            <option value="apkg">Anki .apkg (chapter cards, subdecks)</option>
+          </select>
+        </label>
+        <label>Deck name (for .apkg export)
+          <input id="deck_name" type="text" value="PDF Imports" />
+        </label>
+        <label><input id="use_subdecks" type="checkbox" checked /> Create chapter subdecks</label>
+      </div>
+
+      <button id="run">Generate Export</button>
       <div id="status"></div>
     </div>
 
@@ -64,6 +77,9 @@
         form.append('api_key', document.getElementById('api_key').value);
         form.append('model', document.getElementById('model').value);
         form.append('endpoint', document.getElementById('endpoint').value);
+        form.append('format', document.getElementById('format').value);
+        form.append('deck_name', document.getElementById('deck_name').value);
+        form.append('use_subdecks', String(document.getElementById('use_subdecks').checked));
 
         status.textContent = 'Processing...';
 
@@ -80,10 +96,10 @@
         const cd = res.headers.get('content-disposition') || '';
         const match = /filename="?([^\"]+)"?/.exec(cd);
         a.href = url;
-        a.download = match ? match[1] : 'chapters.zip';
+        a.download = match ? match[1] : 'chapters-export';
         a.click();
         URL.revokeObjectURL(url);
-        status.textContent = 'Done. ZIP downloaded.';
+        status.textContent = 'Done. Export downloaded.';
       });
     </script>
   </body>
