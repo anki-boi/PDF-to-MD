@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF to Chapter Markdown</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; max-width: 820px; margin: 30px auto; padding: 0 16px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 18px; }
+      .grid { display: grid; gap: 10px; }
+      input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 8px; }
+      button { padding: 10px 14px; border-radius: 8px; border: 0; background: #2563eb; color: white; font-weight: 600; }
+      #status { margin-top: 12px; color: #333; }
+      .muted { color: #666; font-size: 14px; }
+      .section { border-top: 1px dashed #ddd; margin-top: 6px; padding-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>PDF → Flattened PDF + Chapter Markdown ZIP</h1>
+    <p class="muted">Pipeline: flatten PDF → extract text (embedded text first, OCR fallback) → split chapters → export ZIP.</p>
+    <div class="card grid">
+      <label>PDF File <input id="file" type="file" accept="application/pdf" /></label>
+
+      <div class="section grid">
+        <label><input id="force_ocr" type="checkbox" /> Force OCR on all pages</label>
+        <label>OCR language (Tesseract language code)
+          <input id="ocr_lang" type="text" value="eng" />
+        </label>
+        <label>OCR fallback threshold (min chars/page from embedded extraction)
+          <input id="min_chars_per_page" type="number" value="25" min="0" />
+        </label>
+      </div>
+
+      <div class="section grid">
+        <label><input id="ai_cleanup" type="checkbox" /> AI cleanup (optional)</label>
+        <label>API Key <input id="api_key" type="password" placeholder="sk-..." /></label>
+        <label>Model <input id="model" type="text" value="gpt-4o-mini" /></label>
+        <label>Endpoint <input id="endpoint" type="text" value="https://api.openai.com/v1/chat/completions" /></label>
+      </div>
+
+      <button id="run">Generate ZIP</button>
+      <div id="status"></div>
+    </div>
+
+    <script>
+      const runBtn = document.getElementById('run');
+      const status = document.getElementById('status');
+
+      runBtn.addEventListener('click', async () => {
+        const file = document.getElementById('file').files[0];
+        if (!file) {
+          status.textContent = 'Please choose a PDF first.';
+          return;
+        }
+
+        const form = new FormData();
+        form.append('file', file);
+
+        form.append('force_ocr', String(document.getElementById('force_ocr').checked));
+        form.append('ocr_lang', document.getElementById('ocr_lang').value);
+        form.append('min_chars_per_page', document.getElementById('min_chars_per_page').value);
+
+        form.append('ai_cleanup', String(document.getElementById('ai_cleanup').checked));
+        form.append('api_key', document.getElementById('api_key').value);
+        form.append('model', document.getElementById('model').value);
+        form.append('endpoint', document.getElementById('endpoint').value);
+
+        status.textContent = 'Processing...';
+
+        const res = await fetch('/process', { method: 'POST', body: form });
+        if (!res.ok) {
+          const data = await res.json();
+          status.textContent = data.error || 'Failed to process PDF.';
+          return;
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const cd = res.headers.get('content-disposition') || '';
+        const match = /filename="?([^\"]+)"?/.exec(cd);
+        a.href = url;
+        a.download = match ? match[1] : 'chapters.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+        status.textContent = 'Done. ZIP downloaded.';
+      });
+    </script>
+  </body>
+</html>
