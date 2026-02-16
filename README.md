@@ -6,6 +6,8 @@ A web app + CLI that lets you upload a PDF, **flattens it first**, extracts text
 - `extraction-report.txt` (shows extraction method used)
 - `01-<chapter>.md`, `02-<chapter>.md`, ...
 
+You can also export directly to Anki `.apkg`, with optional chapter-based subdecks.
+
 ## Extraction strategy (better for obfuscated/edge-case PDFs)
 
 1. Flatten PDF by rewriting pages into a new document.
@@ -59,7 +61,17 @@ Optional examples:
 python cli.py ./book.pdf --force-ocr
 python cli.py ./book.pdf --ocr-lang eng --min-chars-per-page 30
 python cli.py ./book.pdf --ai-cleanup --api-key "$OPENAI_API_KEY" --model gpt-4o-mini
+python cli.py ./book.pdf --format apkg --deck-name "Pharma"
+python cli.py ./book.pdf --format apkg --deck-name "Pharma" --no-subdecks
 ```
+
+## Anki export
+
+Use `--format apkg` to generate an Anki deck package:
+
+- Default behavior creates chapter subdecks as `Deck Name::Chapter Title`.
+- Disable subdecks with `--no-subdecks`.
+- Set a custom root deck with `--deck-name`.
 
 ## Optional AI cleanup
 

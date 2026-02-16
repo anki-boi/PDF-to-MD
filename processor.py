@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import tempfile
 import re
 import zipfile
 from dataclasses import dataclass
@@ -153,6 +154,20 @@ def _sanitize_filename(name: str) -> str:
     return clean[:80] or "chapter"
 
 
+def _sanitize_deck_segment(name: str) -> str:
+    clean = re.sub(r"[\r\n]+", " ", name).strip()
+    clean = clean.replace("::", "-")
+    return clean or "Untitled"
+
+
+def _anki_deck_name(root_deck_name: str, chapter_title: str, use_subdecks: bool) -> str:
+    root = _sanitize_deck_segment(root_deck_name)
+    if not use_subdecks:
+        return root
+    chapter = _sanitize_deck_segment(chapter_title)
+    return f"{root}::{chapter}"
+
+
 def _ai_cleanup(text: str, api_key: str, model: str, endpoint: str) -> str:
     prompt = (
         "You are an expert technical editor. Clean OCR/PDF extraction noise, fix typos, "
@@ -222,3 +237,77 @@ def build_markdown_zip(
             zf.writestr(filename, f"# {chunk.title}\n\n{text}\n")
 
     return archive.getvalue()
+
+
+def build_anki_apkg(
+    source_name: str,
+    pdf_bytes: bytes,
+    ai_cleanup: bool = False,
+    api_key: str | None = None,
+    model: str | None = None,
+    endpoint: str = "https://api.openai.com/v1/chat/completions",
+    force_ocr: bool = False,
+    ocr_lang: str = "eng",
+    min_chars_per_page: int = 25,
+    deck_name: str = "PDF Imports",
+    use_subdecks: bool = True,
+) -> bytes:
+    """Build an Anki .apkg package with one card per extracted chapter.
+
+    When `use_subdecks` is enabled, each chapter is placed in its own subdeck:
+    `<deck_name>::<chapter title>`.
+    """
+    try:
+        import genanki
+    except Exception as exc:
+        raise RuntimeError("Anki export requires `genanki`. Install dependencies from requirements.txt.") from exc
+
+    flattened = flatten_pdf(pdf_bytes)
+    pages, _ = extract_pages_with_fallback(
+        flattened,
+        force_ocr=force_ocr,
+        min_chars_per_page=min_chars_per_page,
+        ocr_lang=ocr_lang,
+    )
+    chapters = split_into_chapters(pages)
+
+    model_id = abs(hash(f"{Path(source_name).stem}-chapter-basic-model")) % (10**10)
+    chapter_model = genanki.Model(
+        model_id,
+        "Chapter Basic",
+        fields=[{"name": "Front"}, {"name": "Back"}],
+        templates=[
+            {
+                "name": "Card 1",
+                "qfmt": "{{Front}}",
+                "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+            }
+        ],
+    )
+
+    decks_by_name: dict[str, object] = {}
+    for chapter in chapters:
+        text = chapter.text
+        if ai_cleanup:
+            if not api_key or not model:
+                raise ValueError("API key and model are required for AI cleanup.")
+            text = _ai_cleanup(text, api_key=api_key, model=model, endpoint=endpoint)
+
+        deck_label = _anki_deck_name(deck_name, chapter.title, use_subdecks=use_subdecks)
+        if deck_label not in decks_by_name:
+            deck_id = abs(hash(deck_label)) % (10**10)
+            decks_by_name[deck_label] = genanki.Deck(deck_id, deck_label)
+
+        note = genanki.Note(
+            model=chapter_model,
+            fields=[chapter.title, text.replace("\n", "<br>")],
+        )
+        decks_by_name[deck_label].add_note(note)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        media_path = Path(tmp_dir) / "media.txt"
+        media_path.write_text("", encoding="utf-8")
+        package = genanki.Package(list(decks_by_name.values()))
+        out_path = Path(tmp_dir) / "deck.apkg"
+        package.write_to_file(str(out_path))
+        return out_path.read_bytes()
